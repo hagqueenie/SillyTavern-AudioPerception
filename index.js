@@ -1,4 +1,4 @@
-/* Audio Perception 0.1: SillyTavern 1.14+ prototype. */
+/* Audio Perception 0.1.1: SillyTavern 1.14+ prototype. */
 const KEY = 'audio_perception_v1';
 const defaults = {enabled:false, model:'gemini-3.8-flash', attribution:'original', presentation:'recorded', performer:'', title:'', notes:''};
 const context = () => globalThis.SillyTavern.getContext();
@@ -15,10 +15,13 @@ async function analyze(media, cfg) {
     const result = await fetch(url, {credentials:'same-origin'});
     if (!result.ok) throw new Error(`Could not read audio (${result.status}).`);
     let blob = await result.blob();
-    if (!blob.size || blob.size > 12 * 1024 * 1024) throw new Error('Use an MP3 or WAV under 12 MiB.');
-    const mime = /\.mp3$/i.test(url.pathname) ? 'audio/mpeg' : /\.wav$/i.test(url.pathname) ? 'audio/wav' : blob.type.split(';')[0];
-    if (!['audio/mpeg','audio/mp3','audio/wav','audio/x-wav'].includes(mime)) throw new Error('This prototype supports MP3 and WAV only.');
-    blob = new Blob([blob],{type:mime.includes('wav')?'audio/wav':'audio/mpeg'});
+    if (!blob.size || blob.size > 12 * 1024 * 1024) throw new Error('Use an MP3, WAV or M4A under 12 MiB.');
+    const extension = url.pathname.match(/\.([a-z0-9]+)$/i)?.[1]?.toLowerCase();
+    const extensionTypes = {mp3:'audio/mpeg', wav:'audio/wav', m4a:'audio/m4a'};
+    const mimeTypes = {'audio/mpeg':'audio/mpeg','audio/mp3':'audio/mpeg','audio/wav':'audio/wav','audio/x-wav':'audio/wav','audio/m4a':'audio/m4a','audio/x-m4a':'audio/m4a','audio/mp4':'audio/m4a'};
+    const mime = extensionTypes[extension] || mimeTypes[blob.type.split(';')[0].toLowerCase()];
+    if (!mime) throw new Error('This prototype supports MP3, WAV and M4A only.');
+    blob = new Blob([blob],{type:mime});
     const data = await toDataUrl(blob);
     const response = await fetch('/api/backends/chat-completions/generate', {
         method:'POST', headers:context().getRequestHeaders(),
@@ -91,7 +94,7 @@ function mount() {
     const host = document.querySelector('#extensions_settings2') || document.querySelector('#extensions_settings');
     if (!host || document.getElementById('ap-settings')) return;
     const root = document.createElement('div'); root.id='ap-settings'; root.className='inline-drawer';
-    root.innerHTML = `<div class="inline-drawer-toggle inline-drawer-header"><b>Audio Perception (Prototype)</b><div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div></div><div class="inline-drawer-content" style="display:none"><label class="checkbox_label"><input data-key="enabled" type="checkbox"> Enable audio analysis (uploads sent to Google)</label><label>Gemini model ID<input class="text_pole" data-key="model" type="text"></label><label>Attribution<select class="text_pole" data-key="attribution"><option value="original">Persona's original music</option><option value="fictional">Fictional artist</option><option value="anonymous">Unidentified music</option></select></label><label>Presentation<select class="text_pole" data-key="presentation"><option value="recorded">As recorded</option><option value="live">Live performance</option><option value="acapella">A cappella</option><option value="piano">Voice and piano</option><option value="guitar">Voice and acoustic guitar</option><option value="soundtrack">Out-of-character soundtrack</option></select></label><label>Fictional performer / author (blank = current persona)<input class="text_pole" data-key="performer" type="text"></label><label>Fictional title (optional)<input class="text_pole" data-key="title" type="text"></label><label>Scene constraints (optional)<textarea class="text_pole" data-key="notes" rows="2" placeholder="Only the first verse is audible, etc."></textarea></label><small>Settings apply to newly analyzed attachments. Cached recordings keep their original settings. MP3 or WAV, up to 12 MiB. Audio is sent to Google, not your main model. Test in a new chat first.</small><div><button class="menu_button" id="ap-inspect">View most recent cached analysis</button></div></div>`;
+    root.innerHTML = `<div class="inline-drawer-toggle inline-drawer-header"><b>Audio Perception (Prototype)</b><div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div></div><div class="inline-drawer-content" style="display:none"><label class="checkbox_label"><input data-key="enabled" type="checkbox"> Enable audio analysis (uploads sent to Google)</label><label>Gemini model ID<input class="text_pole" data-key="model" type="text"></label><label>Attribution<select class="text_pole" data-key="attribution"><option value="original">Persona's original music</option><option value="fictional">Fictional artist</option><option value="anonymous">Unidentified music</option></select></label><label>Presentation<select class="text_pole" data-key="presentation"><option value="recorded">As recorded</option><option value="live">Live performance</option><option value="acapella">A cappella</option><option value="piano">Voice and piano</option><option value="guitar">Voice and acoustic guitar</option><option value="soundtrack">Out-of-character soundtrack</option></select></label><label>Fictional performer / author (blank = current persona)<input class="text_pole" data-key="performer" type="text"></label><label>Fictional title (optional)<input class="text_pole" data-key="title" type="text"></label><label>Scene constraints (optional)<textarea class="text_pole" data-key="notes" rows="2" placeholder="Only the first verse is audible, etc."></textarea></label><small>Settings apply to newly analyzed attachments. Cached recordings keep their original settings. MP3, WAV or M4A, up to 12 MiB. Audio is sent to Google, not your main model. Test in a new chat first.</small><div><button class="menu_button" id="ap-inspect">View most recent cached analysis</button></div></div>`;
     for (const input of root.querySelectorAll('[data-key]')) {
         const key = input.dataset.key;
         if (input.type==='checkbox') input.checked=!!cfg[key]; else input.value=cfg[key];
